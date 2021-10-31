@@ -1,0 +1,20 @@
+{
+  "devDependencies": {
+    "@types/node": "^16.11.6",
+    "nodemon": "^2.0.14",
+    "rimraf": "^3.0.2",
+    "ts-node": "^10.4.0",
+    "typescript": "^4.4.4"
+  },
+  "scripts": {
+    "start:dev": "nodemon",
+    "build": "rimraf ./build && tsc --downlevelIteration",
+    "start": "npm run build && node build/index.js"
+  },
+  "dependencies": {
+    "@mithraic-labs/market-meta": "^0.0.21",
+    "@mithraic-labs/psy-american": "^0.0.11",
+    "@solana/spl-token": "^0.1.8",
+    "@solana/web3.js": "^1.30.2"
+  }
+}
