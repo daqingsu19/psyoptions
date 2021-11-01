@@ -5,6 +5,7 @@ import {
   OrderParamsWithFeeRate,
   PsyAmericanIdl,
   serumInstructions,
+  feeAmountPerContract,
 } from '@mithraic-labs/psy-american';
 import { MarketMeta } from '@mithraic-labs/market-meta';
 import { BN, Program, Provider } from '@project-serum/anchor';
@@ -29,6 +30,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { Market, OpenOrders } from '@project-serum/serum';
 import { Order } from '@project-serum/serum/lib/market';
+import { randomInt } from 'crypto';
 
 function readKeypair() {
   return JSON.parse(
@@ -121,14 +123,14 @@ const writerToken = new Token(
  * Create an account that wraps Sol
  */
 const createWSolAccountInstruction = (
-  provider: Provider,
+  wallet: NodeWallet,
   lamports: number,
 ): [Transaction, Keypair] => {
   const keypair = new Keypair();
   const transaction = new Transaction();
   transaction.add(
     SystemProgram.createAccount({
-      fromPubkey: provider.wallet.publicKey,
+      fromPubkey: wallet.publicKey,
       newAccountPubkey: keypair.publicKey,
       lamports,
       space: AccountLayout.span,
@@ -139,7 +141,7 @@ const createWSolAccountInstruction = (
   transaction.add(
     Token.createInitAccountInstruction(
       TOKEN_PROGRAM_ID,
-      WrappedSolToken.publicKey,
+      WRAPPED_SOL_MINT,
       keypair.publicKey,
       wallet.publicKey,
     ),
@@ -148,6 +150,14 @@ const createWSolAccountInstruction = (
 };
 
 (async () => {
+  const option = (await program.account.optionMarket.fetch(
+    EXAMPLE_WSOL_CALL_OPTION.optionMarketAddress,
+  )) as unknown as OptionMarket;
+  const optionWithKey: OptionMarketWithKey = {
+    ...option,
+    key: new PublicKey(EXAMPLE_WSOL_CALL_OPTION.optionMarketAddress),
+  };
+
   /**
    * SPL Token rent for exemption in lamports
    */
@@ -158,12 +168,17 @@ const createWSolAccountInstruction = (
   const mintTransaction = new Transaction();
   const signers: Signer[] = [];
 
-  // Create WSol account instruction with 5 Sol.
+  // Create WSol account instruction with 1 Sol.
   // To create Wrapped Solana, we must create an account with lamports equal to
   // the amount of Solana we want in the account PLUS the rent exemption amount.
+  const fees = feeAmountPerContract(option.underlyingAmountPerContract);
+  const numContracts = 1;
+  const lamports = option.underlyingAmountPerContract
+    .add(fees)
+    .mul(new BN(numContracts));
   const [createWSolAccountTx, wSolKeypair] = createWSolAccountInstruction(
-    provider,
-    splTokenRentBalance + 1 * LAMPORTS_PER_SOL,
+    wallet,
+    splTokenRentBalance + lamports.toNumber(),
   );
   mintTransaction.add(createWSolAccountTx);
   signers.push(wSolKeypair);
@@ -213,20 +228,13 @@ const createWSolAccountInstruction = (
     );
     mintTransaction.add(ix);
   }
-  const option = (await program.account.optionMarket.fetch(
-    EXAMPLE_WSOL_CALL_OPTION.optionMarketAddress,
-  )) as unknown as OptionMarket;
-  const optionWithKey: OptionMarketWithKey = {
-    ...option,
-    key: new PublicKey(EXAMPLE_WSOL_CALL_OPTION.optionMarketAddress),
-  };
 
   // finally mint the option token
   const { ix, signers: _signers } = await instructions.mintOptionInstruction(
     program,
     optionTokenDest,
     writerTokenDest,
-    new PublicKey(EXAMPLE_WSOL_CALL_OPTION.underlyingAssetMint),
+    wSolKeypair.publicKey,
     new BN(1),
     optionWithKey,
   );
@@ -236,7 +244,7 @@ const createWSolAccountInstruction = (
   // Add instructions to close Wrapped Solana account
   const closeWSolIx = Token.createCloseAccountInstruction(
     TOKEN_PROGRAM_ID,
-    WRAPPED_SOL_MINT,
+    wSolKeypair.publicKey,
     wallet.publicKey, // Send any remaining SOL to the owner
     wallet.publicKey, // payer to close account
     [],
@@ -287,15 +295,27 @@ const createWSolAccountInstruction = (
    * with each order if OpenOrders information is hoisted out and
    * passed in with the Order.
    */
+
+  const side = 'buy';
+  /**
+   * NOTE: For Serum, the payer is the SPL token account required to cover the collateral.
+   * Ping @tomjohn1028 on PsyOptions discord :)
+   * */
+  const payer = side === 'buy' ? await Token.getAssociatedTokenAddress(ASSOCIATED_TOKEN_PROGRAM_ID,
+    TOKEN_PROGRAM_ID,
+    market.quoteMintAddress,
+    wallet.publicKey) : optionTokenDest;
+  // #TODO: change this
+  const clientId = new BN(randomInt(100000));
   const serumProgramId = new PublicKey(EXAMPLE_WSOL_CALL_OPTION.serumProgramId);
   const order: OrderParamsWithFeeRate<PublicKey> = {
     owner: wallet.publicKey,
-    payer: wallet.publicKey,
-    side: 'buy',
+    payer,
+    side,
     price: 221,
     size: 1,
     orderType: 'limit',
-    clientId: new BN(1),
+    clientId,
     selfTradeBehavior: 'decrementTake',
     programId: serumProgramId,
   };
@@ -312,21 +332,23 @@ const createWSolAccountInstruction = (
   /**
    * We no longer like that order, lets cancel it.
    */
+  // for now we have hardcoded clientId, so we commented this out
   // load the open orders for our OpenOrders account
-  const openOrders = await OpenOrders.load(
-    connection,
-    openOrdersKey,
-    serumProgramId,
-  );
-  // for simplicity we'll just use the clientId
-  const firstClientId = openOrders.clientIds[0];
+  // const openOrders = await OpenOrders.load(
+  //   connection,
+  //   openOrdersKey,
+  //   serumProgramId,
+  // );
+  // // for simplicity we'll just use the clientId
+  // const clientId = openOrders.clientIds[0];
+
   const cancelOrderTx = new Transaction().add(
     await serumInstructions.cancelOrderByClientId(
       program,
       optionPublicKey,
       serumProgramId,
       serumMarketKey,
-      { clientId: firstClientId, openOrdersAddress: openOrdersKey } as Order,
+      { clientId, openOrdersAddress: openOrdersKey } as Order,
     ),
   );
   await program.provider.send(cancelOrderTx);
@@ -352,10 +374,15 @@ const createWSolAccountInstruction = (
   // Sol account for the duration of this transaction. However, as we're receiving
   // Wrapped Sol for exercising the WSol call, we don't need to prefund it with
   // extra lamports.
+  const exerciseFees = feeAmountPerContract(option.underlyingAmountPerContract);
+  const exerciseNumContracts = 1;
+  const exerciseLamports = option.underlyingAmountPerContract
+    .add(exerciseFees)
+    .mul(new BN(exerciseNumContracts));
   const [createExerciseWSolAccountTx, wSolExerciseKeypair] =
     createWSolAccountInstruction(
-      provider,
-      splTokenRentBalance + 5 * LAMPORTS_PER_SOL,
+      wallet,
+      splTokenRentBalance + exerciseLamports.toNumber(),
     );
   exerciseTx.add(createExerciseWSolAccountTx);
   exerciseSigners.push(wSolExerciseKeypair);
