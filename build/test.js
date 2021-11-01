@@ -81,6 +81,17 @@ var __read = (this && this.__read) || function (o, n) {
     }
     return ar;
 };
+var __values = (this && this.__values) || function(o) {
+    var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+    if (m) return m.call(o);
+    if (o && typeof o.length === "number") return {
+        next: function () {
+            if (o && i >= o.length) o = void 0;
+            return { value: o && o[i++], done: !o };
+        }
+    };
+    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 var psy_american_1 = require("@mithraic-labs/psy-american");
 var market_meta_1 = require("@mithraic-labs/market-meta");
@@ -89,6 +100,8 @@ var provider_1 = require("@project-serum/anchor/dist/cjs/provider");
 var spl_token_1 = require("@solana/spl-token");
 var web3_js_1 = require("@solana/web3.js");
 var fs = __importStar(require("fs"));
+var serum_1 = require("@project-serum/serum");
+var crypto_1 = require("crypto");
 function readKeypair() {
     return JSON.parse(fs.readFileSync('/Users/jasonchitla/.config/solana/id.json', 'utf-8'));
 }
@@ -147,22 +160,19 @@ var createWSolAccountInstruction = function (wallet, lamports) {
     return [transaction, keypair];
 };
 (function () { return __awaiter(void 0, void 0, void 0, function () {
-    var option, optionWithKey, splTokenRentBalance, mintTransaction, signers, fees, numContracts, lamports, _a, createWSolAccountTx, wSolKeypair, _b, optionTokenDest, writerTokenDest, err_1, ix_1, err_2, ix_2, _c, ix, _signers, closeWSolIx;
-    return __generator(this, function (_d) {
-        switch (_d.label) {
+    var option, optionWithKey, splTokenRentBalance, mintTransaction, signers, fees, numContracts, lamports, _a, createWSolAccountTx, wSolKeypair, _b, optionTokenDest, writerTokenDest, err_1, ix_1, err_2, ix_2, _c, ix, _signers, closeWSolIx, market, bids, asks, _d, _e, _f, price, size, asks_1, asks_1_1, order_1, side, payer, _g, clientId, serumProgramId, order, _h, openOrdersKey, newOrderTx, cancelOrderTx, _j, _k, exerciseTx, exerciseSigners, quoteAssetSource, optionTokenSource, exerciseFees, exerciseNumContracts, exerciseLamports, _l, createExerciseWSolAccountTx, wSolExerciseKeypair, exerciseIx;
+    var e_1, _m, e_2, _o;
+    return __generator(this, function (_p) {
+        switch (_p.label) {
             case 0: return [4 /*yield*/, program.account.optionMarket.fetch(EXAMPLE_WSOL_CALL_OPTION.optionMarketAddress)];
             case 1:
-                option = (_d.sent());
+                option = (_p.sent());
                 optionWithKey = __assign(__assign({}, option), { key: new web3_js_1.PublicKey(EXAMPLE_WSOL_CALL_OPTION.optionMarketAddress) });
                 return [4 /*yield*/, connection.getMinimumBalanceForRentExemption(spl_token_1.AccountLayout.span)];
             case 2:
-                splTokenRentBalance = _d.sent();
+                splTokenRentBalance = _p.sent();
                 mintTransaction = new web3_js_1.Transaction();
                 signers = [];
-                // Create WSol account instruction with 5 Sol.
-                // To create Wrapped Solana, we must create an account with lamports equal to
-                // the amount of Solana we want in the account PLUS the rent exemption amount.
-                console.log('underlyingAmountPerContract: ', option.underlyingAmountPerContract.toNumber());
                 fees = (0, psy_american_1.feeAmountPerContract)(option.underlyingAmountPerContract);
                 numContracts = 1;
                 lamports = option.underlyingAmountPerContract
@@ -176,33 +186,33 @@ var createWSolAccountInstruction = function (wallet, lamports) {
                         spl_token_1.Token.getAssociatedTokenAddress(spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID, spl_token_1.TOKEN_PROGRAM_ID, writerTokenMint, wallet.publicKey),
                     ])];
             case 3:
-                _b = __read.apply(void 0, [_d.sent(), 2]), optionTokenDest = _b[0], writerTokenDest = _b[1];
-                _d.label = 4;
+                _b = __read.apply(void 0, [_p.sent(), 2]), optionTokenDest = _b[0], writerTokenDest = _b[1];
+                _p.label = 4;
             case 4:
-                _d.trys.push([4, 6, , 7]);
+                _p.trys.push([4, 6, , 7]);
                 return [4 /*yield*/, optionToken.getAccountInfo(optionTokenDest)];
             case 5:
-                _d.sent();
+                _p.sent();
                 return [3 /*break*/, 7];
             case 6:
-                err_1 = _d.sent();
+                err_1 = _p.sent();
                 ix_1 = spl_token_1.Token.createAssociatedTokenAccountInstruction(spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID, spl_token_1.TOKEN_PROGRAM_ID, optionTokenMint, optionTokenDest, wallet.publicKey, wallet.publicKey);
                 mintTransaction.add(ix_1);
                 return [3 /*break*/, 7];
             case 7:
-                _d.trys.push([7, 9, , 10]);
+                _p.trys.push([7, 9, , 10]);
                 return [4 /*yield*/, writerToken.getAccountInfo(writerTokenDest)];
             case 8:
-                _d.sent();
+                _p.sent();
                 return [3 /*break*/, 10];
             case 9:
-                err_2 = _d.sent();
+                err_2 = _p.sent();
                 ix_2 = spl_token_1.Token.createAssociatedTokenAccountInstruction(spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID, spl_token_1.TOKEN_PROGRAM_ID, writerTokenMint, writerTokenDest, wallet.publicKey, wallet.publicKey);
                 mintTransaction.add(ix_2);
                 return [3 /*break*/, 10];
             case 10: return [4 /*yield*/, psy_american_1.instructions.mintOptionInstruction(program, optionTokenDest, writerTokenDest, wSolKeypair.publicKey, new anchor_1.BN(1), optionWithKey)];
             case 11:
-                _c = _d.sent(), ix = _c.ix, _signers = _c.signers;
+                _c = _p.sent(), ix = _c.ix, _signers = _c.signers;
                 mintTransaction.add(ix);
                 signers.concat(_signers);
                 closeWSolIx = spl_token_1.Token.createCloseAccountInstruction(spl_token_1.TOKEN_PROGRAM_ID, wSolKeypair.publicKey, wallet.publicKey, // Send any remaining SOL to the owner
@@ -213,7 +223,104 @@ var createWSolAccountInstruction = function (wallet, lamports) {
                 return [4 /*yield*/, program.provider.send(mintTransaction, signers)];
             case 12:
                 // Sign and send transaction
-                _d.sent();
+                _p.sent();
+                return [4 /*yield*/, serum_1.Market.load(connection, new web3_js_1.PublicKey(EXAMPLE_WSOL_CALL_OPTION.serumMarketAddress), {}, new web3_js_1.PublicKey(EXAMPLE_WSOL_CALL_OPTION.serumProgramId))];
+            case 13:
+                market = _p.sent();
+                return [4 /*yield*/, market.loadBids(connection)];
+            case 14:
+                bids = _p.sent();
+                return [4 /*yield*/, market.loadAsks(connection)];
+            case 15:
+                asks = _p.sent();
+                try {
+                    // L2 orderbook data
+                    for (_d = __values(bids.getL2(20)), _e = _d.next(); !_e.done; _e = _d.next()) {
+                        _f = __read(_e.value, 2), price = _f[0], size = _f[1];
+                        console.log(price, size);
+                    }
+                }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                finally {
+                    try {
+                        if (_e && !_e.done && (_m = _d.return)) _m.call(_d);
+                    }
+                    finally { if (e_1) throw e_1.error; }
+                }
+                try {
+                    // L3 orderbook data
+                    for (asks_1 = __values(asks), asks_1_1 = asks_1.next(); !asks_1_1.done; asks_1_1 = asks_1.next()) {
+                        order_1 = asks_1_1.value;
+                        console.log(order_1.openOrdersAddress.toBase58(), order_1.orderId.toString('hex'), order_1.price, order_1.size, order_1.side);
+                    }
+                }
+                catch (e_2_1) { e_2 = { error: e_2_1 }; }
+                finally {
+                    try {
+                        if (asks_1_1 && !asks_1_1.done && (_o = asks_1.return)) _o.call(asks_1);
+                    }
+                    finally { if (e_2) throw e_2.error; }
+                }
+                side = 'buy';
+                if (!(side === 'buy')) return [3 /*break*/, 17];
+                return [4 /*yield*/, spl_token_1.Token.getAssociatedTokenAddress(spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID, spl_token_1.TOKEN_PROGRAM_ID, market.quoteMintAddress, wallet.publicKey)];
+            case 16:
+                _g = _p.sent();
+                return [3 /*break*/, 18];
+            case 17:
+                _g = optionTokenDest;
+                _p.label = 18;
+            case 18:
+                payer = _g;
+                clientId = new anchor_1.BN((0, crypto_1.randomInt)(100000));
+                serumProgramId = new web3_js_1.PublicKey(EXAMPLE_WSOL_CALL_OPTION.serumProgramId);
+                order = {
+                    owner: wallet.publicKey,
+                    payer: payer,
+                    side: side,
+                    price: 221,
+                    size: 1,
+                    orderType: 'limit',
+                    clientId: clientId,
+                    selfTradeBehavior: 'decrementTake',
+                    programId: serumProgramId,
+                };
+                return [4 /*yield*/, psy_american_1.serumInstructions.newOrderInstruction(program, optionPublicKey, serumProgramId, serumMarketKey, order)];
+            case 19:
+                _h = _p.sent(), openOrdersKey = _h.openOrdersKey, newOrderTx = _h.tx;
+                return [4 /*yield*/, program.provider.send(newOrderTx)];
+            case 20:
+                _p.sent();
+                _k = (_j = new web3_js_1.Transaction()).add;
+                return [4 /*yield*/, psy_american_1.serumInstructions.cancelOrderByClientId(program, optionPublicKey, serumProgramId, serumMarketKey, { clientId: clientId, openOrdersAddress: openOrdersKey })];
+            case 21:
+                cancelOrderTx = _k.apply(_j, [_p.sent()]);
+                return [4 /*yield*/, program.provider.send(cancelOrderTx)];
+            case 22:
+                _p.sent();
+                exerciseTx = new web3_js_1.Transaction();
+                exerciseSigners = [];
+                return [4 /*yield*/, spl_token_1.Token.getAssociatedTokenAddress(spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID, spl_token_1.TOKEN_PROGRAM_ID, quoteAssetMint, wallet.publicKey)];
+            case 23:
+                quoteAssetSource = _p.sent();
+                optionTokenSource = optionTokenDest;
+                exerciseFees = (0, psy_american_1.feeAmountPerContract)(option.underlyingAmountPerContract);
+                exerciseNumContracts = 1;
+                exerciseLamports = option.underlyingAmountPerContract
+                    .add(exerciseFees)
+                    .mul(new anchor_1.BN(exerciseNumContracts));
+                _l = __read(createWSolAccountInstruction(wallet, splTokenRentBalance + exerciseLamports.toNumber()), 2), createExerciseWSolAccountTx = _l[0], wSolExerciseKeypair = _l[1];
+                exerciseTx.add(createExerciseWSolAccountTx);
+                exerciseSigners.push(wSolExerciseKeypair);
+                return [4 /*yield*/, psy_american_1.instructions.exerciseOptionsInstruction(program, new anchor_1.BN(1), optionWithKey, optionTokenSource, wSolExerciseKeypair.publicKey, quoteAssetSource)];
+            case 24:
+                exerciseIx = _p.sent();
+                exerciseTx.add(exerciseIx);
+                // Sign and send transaction to exercise
+                return [4 /*yield*/, program.provider.send(exerciseTx, exerciseSigners)];
+            case 25:
+                // Sign and send transaction to exercise
+                _p.sent();
                 return [2 /*return*/];
         }
     });
